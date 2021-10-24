@@ -13,6 +13,7 @@
 > # Setup.
 
 ```sh
+0. Change webhook in main.js
 1. npm i
 2. Launch run.bat
 3. Get fun !
