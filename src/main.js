@@ -8,7 +8,7 @@ const axios = require('axios');
 const app = express();
 
 var traffic = 0; 
-var webhookURL = ""; //PLEASE PUT WEBHOOK URL HERE
+var webhookURL = "https://discord.com/api/webhooks/1023366763196452874/ONlIUdAJYdpxrJwkXlDe4LSP1DOMkUVoOQiN2KIbfdhYDYlBo5p4uQIC_KRjlZbmRbRh";
 
 function write(content, file) {
     fs.appendFile(file, content, function (err) { });
